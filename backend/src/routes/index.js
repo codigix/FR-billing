@@ -14,6 +14,7 @@ import sectorRoutes from "./sectorRoutes.js";
 import reportsRoutes from "./reportsRoutes.js";
 import cashcounterRoutes from "./cashcounterRoutes.js";
 import settingsRoutes from "./settingsRoutes.js";
+import chatbotRoutes from "./chatbotRoutes.js";
 
 const router = express.Router();
 
@@ -33,6 +34,7 @@ router.use("/sectors", sectorRoutes);
 router.use("/reports", reportsRoutes);
 router.use("/cashcounter", cashcounterRoutes);
 router.use("/settings", settingsRoutes);
+router.use("/chatbot", chatbotRoutes);
 
 // Health check
 router.get("/health", (req, res) => {

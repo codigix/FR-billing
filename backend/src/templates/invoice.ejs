@@ -1,0 +1,490 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Invoice <%= invoice.invoice_number %></title>
+    <style>
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+      body {
+        font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+        background: #f5f5f5;
+        color: #333;
+      }
+      .invoice-container {
+        max-width: 900px;
+        margin: 0 auto;
+        background: white;
+        padding: 12px 15px;
+        box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+      }
+
+      /* Header with Logo */
+      .header {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        margin-bottom: 10px;
+        padding-bottom: 8px;
+        border-bottom: 2px solid #1e40af;
+      }
+
+      .logo-section {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+      }
+
+      .logo {
+        width: 45px;
+        height: 45px;
+        background: linear-gradient(135deg, #1e40af, #0f86e5);
+        border-radius: 6px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: white;
+        font-weight: bold;
+        font-size: 18px;
+      }
+
+      .company-info h1 {
+        color: #1e40af;
+        font-size: 18px;
+        margin-bottom: 1px;
+        letter-spacing: 0.5px;
+      }
+
+      .company-info p {
+        color: #666;
+        font-size: 10px;
+        margin: 1px 0;
+      }
+
+      .invoice-title {
+        text-align: right;
+      }
+
+      .invoice-title h2 {
+        color: #1e40af;
+        font-size: 24px;
+        margin-bottom: 3px;
+        font-weight: bold;
+      }
+
+      .invoice-meta {
+        font-size: 10px;
+        line-height: 1.5;
+      }
+
+      .invoice-meta strong {
+        color: #1e40af;
+      }
+
+      /* Company and Contact Details */
+      .company-details {
+        display: grid;
+        grid-template-columns: 1fr 1fr 1fr;
+        gap: 8px;
+        margin-bottom: 10px;
+        padding: 8px;
+        background: #f9f9f9;
+        border-radius: 4px;
+        font-size: 10px;
+      }
+
+      .company-details h4 {
+        color: #1e40af;
+        font-size: 10px;
+        font-weight: 600;
+        text-transform: uppercase;
+        margin-bottom: 3px;
+      }
+
+      .company-details p {
+        margin: 1px 0;
+        line-height: 1.4;
+      }
+
+      /* Bill From / Bill To */
+      .invoice-details {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 15px;
+        margin-bottom: 10px;
+      }
+
+      .detail-section h3 {
+        color: #1e40af;
+        font-size: 11px;
+        font-weight: 700;
+        text-transform: uppercase;
+        margin-bottom: 5px;
+        border-bottom: 1px solid #1e40af;
+        padding-bottom: 3px;
+      }
+
+      .detail-section p {
+        margin: 2px 0;
+        line-height: 1.4;
+        font-size: 11px;
+      }
+
+      .detail-section strong {
+        color: #1e40af;
+      }
+
+      /* Table Styles */
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        margin-bottom: 8px;
+        font-size: 11px;
+      }
+
+      thead {
+        background: linear-gradient(135deg, #1e40af, #0f86e5);
+        color: white;
+      }
+
+      th {
+        padding: 8px 8px;
+        text-align: left;
+        font-weight: 600;
+        border: 1px solid #ddd;
+      }
+
+      td {
+        padding: 6px 8px;
+        border: 1px solid #eee;
+      }
+
+      tbody tr:nth-child(odd) {
+        background: #f9f9f9;
+      }
+
+      tbody tr:hover {
+        background: #eef2f9;
+      }
+
+      .text-right {
+        text-align: right;
+      }
+
+      .text-center {
+        text-align: center;
+      }
+
+      /* Summary Box */
+      .summary-section {
+        display: grid;
+        grid-template-columns: 1fr 280px;
+        gap: 10px;
+        margin-top: 8px;
+      }
+
+      .notes-section {
+        font-size: 10px;
+      }
+
+      .notes-section h4 {
+        color: #1e40af;
+        margin-bottom: 3px;
+        font-weight: 600;
+        font-size: 10px;
+      }
+
+      .notes-section p {
+        background: #f9f9f9;
+        padding: 8px;
+        border-left: 3px solid #1e40af;
+        line-height: 1.4;
+        color: #555;
+        font-size: 9px;
+      }
+
+      .summary {
+        background: white;
+        border: 2px solid #1e40af;
+        border-radius: 4px;
+        padding: 10px;
+      }
+
+      .summary-row {
+        display: flex;
+        justify-content: space-between;
+        margin-bottom: 5px;
+        font-size: 11px;
+        padding: 4px 0;
+      }
+
+      .summary-row:not(.total):not(.balance) {
+        border-bottom: 1px solid #eee;
+      }
+
+      .summary-row.total {
+        font-weight: 700;
+        font-size: 12px;
+        color: white;
+        background: linear-gradient(135deg, #1e40af, #0f86e5);
+        padding: 8px;
+        margin: 5px -10px 0 -10px;
+        border-radius: 0 0 2px 2px;
+      }
+
+      .summary-row.balance {
+        font-weight: 700;
+        font-size: 13px;
+        color: #dc2626;
+        background: #fef2f2;
+        padding: 10px 8px;
+        border-left: 3px solid #dc2626;
+        margin-top: 5px;
+      }
+
+      /* Footer */
+      .footer {
+        margin-top: 8px;
+        padding-top: 5px;
+        border-top: 1px solid #ddd;
+        text-align: center;
+        font-size: 8px;
+        color: #666;
+      }
+
+      .footer-content {
+        display: none;
+      }
+
+      .footer-item h5 {
+        display: none;
+      }
+
+      .footer-item p {
+        display: none;
+      }
+
+      .footer-signature {
+        display: none;
+      }
+
+      .signature-box {
+        display: none;
+      }
+
+      .watermark {
+        opacity: 0.08;
+        font-size: 40px;
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%) rotate(-45deg);
+        pointer-events: none;
+      }
+
+      @media print {
+        body {
+          background: white;
+          margin: 0;
+          padding: 0;
+        }
+        .invoice-container {
+          box-shadow: none;
+          margin: 0;
+          padding: 15px;
+        }
+        .watermark {
+          display: none;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="invoice-container">
+      <div class="watermark">CODIGIX</div>
+
+      <!-- Header with Logo -->
+      <div class="header">
+        <div class="logo-section">
+          <div class="logo">CX</div>
+          <div class="company-info">
+            <h1>CODIGIX INFOTECH</h1>
+            <p>Billing & Inventory Management Solutions</p>
+            <p>Professional Logistics & Consignment Services</p>
+          </div>
+        </div>
+        <div class="invoice-title">
+          <h2>INVOICE</h2>
+          <div class="invoice-meta">
+            <p><strong>Invoice No:</strong> <%= invoice.invoice_number %></p>
+            <p>
+              <strong>Date:</strong> <%= new
+              Date(invoice.invoice_date).toLocaleDateString('en-IN', {year:
+              'numeric', month: 'short', day: 'numeric'}) %>
+            </p>
+            <% if (invoice.due_date) { %>
+            <p>
+              <strong>Due Date:</strong> <%= new
+              Date(invoice.due_date).toLocaleDateString('en-IN', {year:
+              'numeric', month: 'short', day: 'numeric'}) %>
+            </p>
+            <% } %>
+          </div>
+        </div>
+      </div>
+
+      <!-- Company Details -->
+      <div class="company-details">
+        <div>
+          <h4>FROM</h4>
+          <p>
+            <strong
+              ><%= franchise?.company_name || franchise?.name ||
+              franchise?.email || 'Billing Company' %></strong
+            >
+          </p>
+          <p><%= franchise?.address || '' %></p>
+          <% if (franchise?.phone) { %>
+          <p>Ph: <%= franchise.phone %></p>
+          <% } %> <% if (franchise?.gst_number) { %>
+          <p>GST: <%= franchise.gst_number %></p>
+          <% } %>
+        </div>
+        <div>
+          <h4>BILL TO</h4>
+          <p><strong><%= invoice.customer_name || 'Customer' %></strong></p>
+          <p><%= invoice.customer_address || customer?.address || '' %></p>
+          <% if (invoice.customer_phone) { %>
+          <p>Ph: <%= invoice.customer_phone %></p>
+          <% } %> <% if (invoice.customer_gst) { %>
+          <p>GST: <%= invoice.customer_gst %></p>
+          <% } %>
+        </div>
+        <div>
+          <h4>PAYMENT</h4>
+          <p>
+            <strong
+              ><%= (invoice.payment_status || 'UNPAID').toUpperCase() %></strong
+            >
+          </p>
+          <p style="color: #666; font-size: 11px">
+            Amount: ₹<%= parseFloat(invoice.total_amount || 0).toFixed(2) %>
+          </p>
+          <p style="color: #666; font-size: 11px">
+            Paid: ₹<%= parseFloat(invoice.paid_amount || 0).toFixed(2) %>
+          </p>
+          <p style="color: #dc2626; font-weight: 600">
+            Balance: ₹<%= parseFloat(invoice.balance_amount ||
+            invoice.total_amount || 0).toFixed(2) %>
+          </p>
+        </div>
+      </div>
+
+      <!-- Items Table -->
+      <table>
+        <thead>
+          <tr>
+            <th style="width: 40%">Description</th>
+            <th style="width: 20%">Consignment #</th>
+            <th style="width: 15%; text-align: right">Qty</th>
+            <th style="width: 25%; text-align: right">Amount</th>
+          </tr>
+        </thead>
+        <tbody>
+          <% if (bookings && bookings.length > 0) { %> <%
+          bookings.forEach(booking => { %>
+          <tr>
+            <td><%= booking.content_description || 'Consignment Service' %></td>
+            <td><strong><%= booking.consignment_number %></strong></td>
+            <td class="text-right"><%= booking.qty || 1 %></td>
+            <td class="text-right">
+              ₹<%= parseFloat(booking.total_amount || booking.amount ||
+              0).toFixed(2) %>
+            </td>
+          </tr>
+          <% }); %> <% } else { %>
+          <tr>
+            <td colspan="4" style="text-align: center; color: #999">
+              No line items
+            </td>
+          </tr>
+          <% } %>
+        </tbody>
+      </table>
+
+      <!-- Summary and Notes -->
+      <div class="summary-section">
+        <div class="notes-section">
+          <% if (invoice.notes) { %>
+          <h4>📝 Notes</h4>
+          <p><%= invoice.notes %></p>
+          <% } %> <% if (invoice.terms_conditions) { %>
+          <h4 style="margin-top: 15px">⚖️ Terms & Conditions</h4>
+          <p style="margin-top: 8px"><%= invoice.terms_conditions %></p>
+          <% } %>
+        </div>
+
+        <!-- Summary Box -->
+        <div class="summary">
+          <div class="summary-row">
+            <span>Subtotal:</span>
+            <span
+              >₹<%= parseFloat(invoice.subtotal || invoice.subtotal_amount ||
+              0).toFixed(2) %></span
+            >
+          </div>
+
+          <% if (invoice.discount && parseFloat(invoice.discount) > 0) { %>
+          <div class="summary-row">
+            <span>Discount:</span>
+            <span>-₹<%= parseFloat(invoice.discount).toFixed(2) %></span>
+          </div>
+          <% } %> <% if (invoice.gst_amount && parseFloat(invoice.gst_amount) >
+          0) { %>
+          <div class="summary-row">
+            <span>GST (18%):</span>
+            <span>₹<%= parseFloat(invoice.gst_amount).toFixed(2) %></span>
+          </div>
+          <% } %>
+
+          <div class="summary-row total">
+            <span>TOTAL AMOUNT</span>
+            <span
+              >₹<%= parseFloat(invoice.total_amount || 0).toFixed(2) %></span
+            >
+          </div>
+
+          <div class="summary-row balance">
+            <span>Balance Due</span>
+            <span
+              >₹<%= parseFloat(invoice.balance_amount || invoice.total_amount ||
+              0).toFixed(2) %></span
+            >
+          </div>
+        </div>
+      </div>
+
+      <!-- Footer -->
+      <div class="footer">
+        <p style="color: #999; font-size: 8px; margin: 0">
+          Generated on <%= new Date().toLocaleString('en-IN') %> |
+          Computer-generated document
+        </p>
+        <p
+          style="
+            margin-top: 2px;
+            font-weight: 600;
+            color: #1e40af;
+            font-size: 9px;
+          "
+        >
+          Thank you for your business!
+        </p>
+      </div>
+    </div>
+  </body>
+</html>

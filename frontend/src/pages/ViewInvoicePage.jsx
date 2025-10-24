@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Search, Download, Eye, Edit } from "lucide-react";
+import { Search, Download, Eye, Edit, Loader } from "lucide-react";
 
 export default function ViewInvoicePage() {
   const [filters, setFilters] = useState({
@@ -11,6 +11,7 @@ export default function ViewInvoicePage() {
 
   const [invoices, setInvoices] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [downloadingId, setDownloadingId] = useState(null);
   const [summary, setSummary] = useState({
     paid_amount: 0,
     unpaid_amount: 0,
@@ -90,6 +91,41 @@ export default function ViewInvoicePage() {
 
   const handleEdit = (id) => {
     alert(`Edit Invoice ID: ${id}`);
+  };
+
+  const handleDownloadInvoice = async (invoiceId, invoiceNumber) => {
+    try {
+      setDownloadingId(invoiceId);
+      const token = localStorage.getItem("token");
+
+      const response = await fetch(
+        `http://localhost:5000/api/invoices/${invoiceId}/download`,
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        }
+      );
+
+      if (!response.ok) {
+        throw new Error("Invoice download failed");
+      }
+
+      const blob = await response.blob();
+      const blobUrl = window.URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = blobUrl;
+      link.download = `${invoiceNumber}.pdf`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(blobUrl);
+    } catch (error) {
+      console.error("Download error:", error);
+      alert("Failed to download invoice");
+    } finally {
+      setDownloadingId(null);
+    }
   };
 
   return (
@@ -331,6 +367,23 @@ export default function ViewInvoicePage() {
                     </td>
                     <td className="px-4 py-3 text-sm">
                       <div className="flex gap-2">
+                        <button
+                          onClick={() =>
+                            handleDownloadInvoice(
+                              invoice.id,
+                              invoice.invoice_number
+                            )
+                          }
+                          disabled={downloadingId === invoice.id}
+                          className="rounded bg-green-600 px-3 py-1 text-xs font-medium text-white hover:bg-green-700 disabled:opacity-50 flex items-center gap-1"
+                        >
+                          {downloadingId === invoice.id ? (
+                            <Loader className="h-3 w-3 animate-spin" />
+                          ) : (
+                            <Download className="h-3 w-3" />
+                          )}
+                          Download
+                        </button>
                         <button
                           onClick={() => handleView(invoice.id)}
                           className="rounded bg-emerald-600 px-3 py-1 text-xs font-medium text-white hover:bg-emerald-700"

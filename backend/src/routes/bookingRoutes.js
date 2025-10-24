@@ -16,6 +16,7 @@ import {
   importFromExcel,
   downloadTemplate,
   getRecycledConsignments,
+  searchBookingsWithInvoices,
   upload,
 } from "../controllers/bookingController.js";
 import { authenticate } from "../middleware/auth.js";
@@ -33,6 +34,7 @@ router.get(
   authenticate,
   getBookingByConsignment
 );
+router.get("/search-with-invoices", authenticate, searchBookingsWithInvoices);
 router.get("/filter", authenticate, filterBookings);
 router.get("/no-booking-list", authenticate, getNoBookingList);
 router.get("/recycle/list", authenticate, getRecycledConsignments);

@@ -371,17 +371,22 @@ export const deleteBooking = async (req, res) => {
   }
 };
 
-// Filter bookings by customer and date range
+// Filter bookings by customer, consignment_no, and/or date range
 export const filterBookings = async (req, res) => {
   try {
     const franchiseId = req.user.franchise_id;
-    const { customer_id, from_date, to_date } = req.query;
+    const { customer_id, consignment_no, from_date, to_date } = req.query;
 
-    // Validate required fields
-    if (!from_date || !to_date) {
+    // Validate that at least one search filter is provided
+    const hasCustomerId = customer_id && customer_id.trim();
+    const hasConsignmentNo = consignment_no && consignment_no.trim();
+    const hasDateRange = from_date && to_date;
+
+    if (!hasCustomerId && !hasConsignmentNo && !hasDateRange) {
       return res.status(400).json({
         success: false,
-        message: "from_date and to_date are required",
+        message:
+          "Please provide consignment_no OR customer_id OR both from_date and to_date",
       });
     }
 
@@ -389,22 +394,30 @@ export const filterBookings = async (req, res) => {
     let whereClause = "WHERE franchise_id = ?";
     const params = [franchiseId];
 
-    if (customer_id && customer_id.trim()) {
+    if (hasConsignmentNo) {
+      whereClause += " AND consignment_number LIKE ?";
+      params.push(`%${consignment_no.trim()}%`);
+    }
+
+    if (hasCustomerId) {
       whereClause += " AND customer_id = ?";
       params.push(customer_id.trim());
     }
 
     // Use DATE() function for proper date comparison (ignores time)
-    whereClause += " AND DATE(booking_date) >= ?";
-    params.push(from_date);
+    if (hasDateRange) {
+      whereClause += " AND DATE(booking_date) >= ?";
+      params.push(from_date);
 
-    whereClause += " AND DATE(booking_date) <= ?";
-    params.push(to_date);
+      whereClause += " AND DATE(booking_date) <= ?";
+      params.push(to_date);
+    }
 
     console.log("Filter query:", {
       whereClause,
       params,
       customer_id,
+      consignment_no,
       from_date,
       to_date,
     });
@@ -946,6 +959,80 @@ export const getRecycledConsignments = async (req, res) => {
     res.status(500).json({
       success: false,
       message: "Failed to fetch recycled consignments",
+    });
+  }
+};
+
+// Search bookings with invoice data (for chatbot)
+export const searchBookingsWithInvoices = async (req, res) => {
+  try {
+    const franchiseId = req.user.franchise_id;
+    const { consignmentNo, customerId } = req.query;
+
+    if (!consignmentNo && !customerId) {
+      return res.status(400).json({
+        success: false,
+        message: "Please provide either consignmentNo or customerId",
+      });
+    }
+
+    const db = getDb();
+    let query = `
+      SELECT DISTINCT
+        b.id,
+        b.consignment_number,
+        b.customer_id,
+        b.destination,
+        b.act_wt as weight,
+        b.mode,
+        b.total as amount,
+        b.booking_date,
+        b.status,
+        i.id as invoice_id,
+        i.invoice_number
+      FROM bookings b
+      LEFT JOIN invoice_items ii ON b.id = ii.booking_id
+      LEFT JOIN invoices i ON ii.invoice_id = i.id
+      WHERE b.franchise_id = ?
+    `;
+    const params = [franchiseId];
+
+    if (consignmentNo) {
+      query += ` AND LOWER(b.consignment_number) = LOWER(?)`;
+      params.push(consignmentNo.trim());
+    }
+
+    if (customerId) {
+      query += ` AND b.customer_id = ?`;
+      params.push(customerId.trim());
+    }
+
+    query += ` ORDER BY b.booking_date DESC`;
+
+    const [bookings] = await db.query(query, params);
+
+    if (bookings.length === 0) {
+      return res.json({
+        success: true,
+        data: {
+          bookings: [],
+          message: "No bookings found for the selected criteria.",
+        },
+      });
+    }
+
+    res.json({
+      success: true,
+      data: {
+        bookings,
+        count: bookings.length,
+      },
+    });
+  } catch (error) {
+    console.error("Search bookings error:", error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to search bookings",
     });
   }
 };

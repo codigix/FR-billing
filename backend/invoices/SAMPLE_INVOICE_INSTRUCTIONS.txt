@@ -1,0 +1,175 @@
+╔════════════════════════════════════════════════════════════════════╗
+║        SAMPLE INVOICE FILES - SETUP INSTRUCTIONS                    ║
+╚════════════════════════════════════════════════════════════════════╝
+
+This folder contains invoice PDF files that can be downloaded via chatbot.
+
+📝 HOW TO ADD INVOICE FILES:
+
+1. Create or export your invoice as PDF
+2. Name it following this pattern: inv_[invoice_id].pdf
+   
+   Examples:
+   ✓ inv_2025_001.pdf
+   ✓ inv_2025_002.pdf
+   ✓ inv_20250001.pdf
+   ✓ inv_FR_001.pdf
+
+3. Place the PDF file in this folder: /backend/invoices/
+
+4. Make sure your bookings database has matching invoice_id values:
+   Example: booking with invoice_id='2025_001' → inv_2025_001.pdf
+
+
+🧪 TESTING WITH SAMPLE FILES:
+
+Option 1: Use Real PDFs
+─────────────────────
+- Generate invoices from your system
+- Save as PDF
+- Place in /backend/invoices/ folder
+- Update database with invoice_id values
+- Test in chatbot
+
+Option 2: Quick Test (No Real PDFs)
+──────────────────────────────────
+You can create empty/dummy PDF files for testing:
+
+PowerShell Command:
+─────────────────
+New-Item -Path "inv_2025_001.pdf" -ItemType File
+New-Item -Path "inv_2025_002.pdf" -ItemType File
+
+Then test download - system doesn't care about PDF content for this test!
+
+
+📋 DATABASE SETUP:
+
+Before testing, ensure bookings have invoice_id:
+
+```sql
+-- Check current data
+SELECT consignment_number, invoice_id FROM bookings LIMIT 5;
+
+-- Add invoice IDs (if column doesn't exist, add it first)
+ALTER TABLE bookings ADD COLUMN invoice_id VARCHAR(255) NULL;
+
+-- Update with sample values
+UPDATE bookings 
+SET invoice_id = '2025_001' 
+WHERE consignment_number = 'CN20240001';
+
+UPDATE bookings 
+SET invoice_id = '2025_002' 
+WHERE consignment_number LIKE 'CN%' LIMIT 1 OFFSET 1;
+```
+
+
+🚀 QUICK TEST:
+
+1. Backend running? Start with: npm start
+2. Frontend running? Start with: npm run dev (in frontend folder)
+3. Place test PDF here: inv_2025_001.pdf
+4. Update database with invoice_id='2025_001' for one booking
+5. Open chatbot and enter that consignment number
+6. Click "Download Invoice" button
+7. File should download!
+
+
+📁 FOLDER STRUCTURE:
+
+backend/
+├── invoices/                    ← Files go here
+│   ├── inv_2025_001.pdf
+│   ├── inv_2025_002.pdf
+│   └── SAMPLE_INVOICE_INSTRUCTIONS.txt (this file)
+├── src/
+│   ├── controllers/
+│   │   ├── invoiceController.js (updated)
+│   │   └── chatbotController.js (updated)
+│   └── routes/
+│       └── invoiceRoutes.js (updated)
+└── ...
+
+
+🔗 FILE NAMING CONVENTION:
+
+Pattern: inv_[invoice_id].pdf
+
+What is invoice_id?
+─────────────────
+- Value from bookings.invoice_id column
+- Can be: 2025_001, 20250001, FR_INV_001, etc.
+- Must match EXACTLY
+
+Example Mapping:
+────────────────
+Database:
+  bookings.consignment_number = 'CN20240001'
+  bookings.invoice_id = '2025_001'
+
+File needed:
+  /backend/invoices/inv_2025_001.pdf
+
+
+✅ VERIFICATION CHECKLIST:
+
+Before testing, verify:
+- [ ] /backend/invoices/ folder exists
+- [ ] At least one PDF file in folder
+- [ ] File named: inv_[something].pdf
+- [ ] Database bookings.invoice_id column exists
+- [ ] Booking record has invoice_id value
+- [ ] invoice_id matches PDF filename
+- [ ] Backend running on port 5000
+- [ ] Frontend running
+- [ ] Logged into application
+
+
+🐛 IF DOWNLOAD FAILS:
+
+Check these in order:
+1. Is backend running? (port 5000)
+2. Does file exist? (check folder)
+3. Filename correct? (inv_[id].pdf)
+4. Database has invoice_id? (query the table)
+5. invoice_id matches file? (must be exact)
+6. Authentication token valid? (try logging out/in)
+
+
+💡 GENERATING REAL INVOICES:
+
+Option A: From Admin Panel
+──────────────────────────
+1. Go to Generate Invoice page
+2. Create invoice
+3. Download/Export as PDF
+4. Save as: inv_[invoice_id].pdf
+5. Move to /backend/invoices/
+
+Option B: Programmatically (Future)
+───────────────────────────────────
+Backend can auto-generate PDFs using:
+- Node libraries: pdfkit, puppeteer, wkhtmltopdf
+- Will be added in future updates
+
+
+📞 SUPPORT:
+
+If you need help:
+1. Check all files exist in correct locations
+2. Verify database values
+3. Check browser console (F12) for errors
+4. Check backend logs in terminal
+5. Restart both frontend and backend
+
+
+🎉 YOU'RE ALL SET!
+
+Place your invoice PDFs in this folder and test the download feature!
+Questions? Check the full guide: CHATBOT_INVOICE_DOWNLOAD_GUIDE.md
+
+─────────────────────────────────────────────────────────────────────
+Created: October 24, 2025
+Status: ✅ Ready to Use
+─────────────────────────────────────────────────────────────────────

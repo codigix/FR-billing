@@ -1,5 +1,48 @@
 import { getDb } from "../config/database.js";
 import dayjs from "dayjs";
+import ejs from "ejs";
+import path from "path";
+import { fileURLToPath } from "url";
+import pdf from "html-pdf";
+
+// Helper function to generate unique invoice number with retry logic
+const generateUniqueInvoiceNumber = async (
+  connection,
+  franchiseId,
+  invoiceNo
+) => {
+  if (invoiceNo) return invoiceNo;
+
+  let attempt = 0;
+  const maxAttempts = 10;
+
+  while (attempt < maxAttempts) {
+    const [[{ count }]] = await connection.query(
+      "SELECT COUNT(*) as count FROM invoices WHERE franchise_id = ? AND YEAR(invoice_date) = YEAR(CURDATE())",
+      [franchiseId]
+    );
+
+    const invoiceNumber = `INV/${dayjs().format("YYYY")}/${String(
+      count + attempt + 1
+    ).padStart(4, "0")}`;
+
+    // Check if this number already exists (to avoid duplicates)
+    const [[existing]] = await connection.query(
+      "SELECT id FROM invoices WHERE invoice_number = ?",
+      [invoiceNumber]
+    );
+
+    if (!existing) {
+      return invoiceNumber;
+    }
+
+    attempt++;
+  }
+
+  throw new Error(
+    "Failed to generate unique invoice number after multiple attempts"
+  );
+};
 
 // Get all invoices with filters
 export const getAllInvoices = async (req, res) => {
@@ -178,31 +221,47 @@ export const generateInvoice = async (req, res) => {
       net_amount,
     } = req.body;
 
-    if (!customer_id || !period_from || !period_to) {
+    if (!customer_id) {
       return res.status(400).json({
         success: false,
-        message: "Customer ID, Period From, and Period To are required",
+        message: "Customer ID is required",
       });
+    }
+
+    // At least one of period_from, period_to, or bookings must be provided
+    if (!bookings || bookings.length === 0) {
+      if (!period_from && !period_to) {
+        return res.status(400).json({
+          success: false,
+          message:
+            "Please provide either booking IDs or both Period From and Period To dates",
+        });
+      }
+      if (!period_from || !period_to) {
+        return res.status(400).json({
+          success: false,
+          message:
+            "Both Period From and Period To are required when using date range",
+        });
+      }
     }
 
     await connection.beginTransaction();
 
-    // Generate invoice number if not provided
-    let invoiceNumber = invoice_no;
-    if (!invoiceNumber) {
-      const [[{ count }]] = await connection.query(
-        "SELECT COUNT(*) as count FROM invoices WHERE franchise_id = ? AND YEAR(invoice_date) = YEAR(CURDATE())",
-        [franchiseId]
-      );
-      invoiceNumber = `INV/${dayjs().format("YYYY")}/${String(
-        count + 1
-      ).padStart(4, "0")}`;
-    }
+    // Generate unique invoice number
+    const invoiceNumber = await generateUniqueInvoiceNumber(
+      connection,
+      franchiseId,
+      invoice_no
+    );
 
     // Calculate fuel surcharge
     const fuelSurchargeTotal =
       (parseFloat(subtotal) * parseFloat(fuel_surcharge_tax_percent)) / 100;
     const gstAmount = (parseFloat(net_amount) * parseFloat(gst_percent)) / 100;
+
+    // Calculate balance amount (initially equal to total amount)
+    const balanceAmount = total || 0;
 
     // Insert invoice
     const [result] = await connection.query(
@@ -210,16 +269,16 @@ export const generateInvoice = async (req, res) => {
        (franchise_id, invoice_number, invoice_date, customer_id, address, period_from, period_to,
         invoice_discount, reverse_charge, fuel_surcharge_percent, fuel_surcharge_total,
         gst_percent, gst_amount_new, other_charge, royalty_charge, docket_charge,
-        total_amount, subtotal_amount, net_amount, payment_status)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'unpaid')`,
+        total_amount, subtotal_amount, net_amount, paid_amount, balance_amount, payment_status)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'unpaid')`,
       [
         franchiseId,
         invoiceNumber,
         invoice_date || dayjs().format("YYYY-MM-DD"),
         customer_id,
         address,
-        period_from,
-        period_to,
+        period_from || null,
+        period_to || null,
         invoice_discount ? 1 : 0,
         reverse_charge ? 1 : 0,
         fuel_surcharge_tax_percent || 0,
@@ -232,6 +291,8 @@ export const generateInvoice = async (req, res) => {
         total || 0,
         subtotal || 0,
         net_amount || 0,
+        0, // paid_amount starts at 0
+        balanceAmount, // balance_amount equals total initially
       ]
     );
 
@@ -242,7 +303,7 @@ export const generateInvoice = async (req, res) => {
       for (const bookingId of bookings) {
         await connection.query(
           `INSERT INTO invoice_items (invoice_id, booking_id, description, quantity, unit_price, amount)
-           SELECT ?, id, CONCAT('Booking: ', consignment_no), 1, total, total
+           SELECT ?, id, CONCAT('Booking: ', consignment_number), 1, total, total
            FROM bookings WHERE id = ?`,
           [invoiceId, bookingId]
         );
@@ -317,14 +378,12 @@ export const generateMultipleInvoices = async (req, res) => {
       const gstAmount = (total * parseFloat(gst_percent)) / 100;
       const netAmount = subtotal + gstAmount;
 
-      // Generate invoice number
-      const [[{ count }]] = await connection.query(
-        "SELECT COUNT(*) as count FROM invoices WHERE franchise_id = ? AND YEAR(invoice_date) = YEAR(CURDATE())",
-        [franchiseId]
+      // Generate unique invoice number
+      const invoiceNumber = await generateUniqueInvoiceNumber(
+        connection,
+        franchiseId,
+        null
       );
-      const invoiceNumber = `INV/${dayjs().format("YYYY")}/${String(
-        count + successCount + 1
-      ).padStart(4, "0")}`;
 
       // Insert invoice
       const [result] = await connection.query(
@@ -357,7 +416,7 @@ export const generateMultipleInvoices = async (req, res) => {
           [
             invoiceId,
             booking.id,
-            `Booking: ${booking.consignment_no}`,
+            `Booking: ${booking.consignment_number}`,
             booking.total,
             booking.total,
           ]
@@ -421,17 +480,12 @@ export const generateSingleInvoice = async (req, res) => {
 
     await connection.beginTransaction();
 
-    // Generate invoice number if not provided
-    let invoiceNumber = invoice_no;
-    if (!invoiceNumber) {
-      const [[{ count }]] = await connection.query(
-        "SELECT COUNT(*) as count FROM invoices WHERE franchise_id = ? AND YEAR(invoice_date) = YEAR(CURDATE())",
-        [franchiseId]
-      );
-      invoiceNumber = `INV/${dayjs().format("YYYY")}/${String(
-        count + 1
-      ).padStart(4, "0")}`;
-    }
+    // Generate unique invoice number
+    const invoiceNumber = await generateUniqueInvoiceNumber(
+      connection,
+      franchiseId,
+      invoice_no
+    );
 
     // Calculate values
     const fuelSurchargeTotal =
@@ -475,7 +529,7 @@ export const generateSingleInvoice = async (req, res) => {
     // Link booking to invoice
     await connection.query(
       `INSERT INTO invoice_items (invoice_id, booking_id, description, quantity, unit_price, amount)
-       SELECT ?, id, CONCAT('Booking: ', consignment_no), 1, total, total
+       SELECT ?, id, CONCAT('Booking: ', consignment_number), 1, total, total
        FROM bookings WHERE id = ?`,
       [invoiceId, booking_id]
     );
@@ -530,14 +584,39 @@ export const generateInvoiceWithoutGST = async (req, res) => {
 
     await connection.beginTransaction();
 
-    // Generate invoice number
-    const [[{ count }]] = await connection.query(
-      "SELECT COUNT(*) as count FROM invoices WHERE franchise_id = ? AND YEAR(invoice_date) = YEAR(CURDATE())",
-      [franchiseId]
-    );
-    const invoiceNumber = `INV/${dayjs().format("YYYY")}/WG/${String(
-      count + 1
-    ).padStart(4, "0")}`;
+    // Generate unique invoice number without GST (WG = Without GST)
+    let invoiceNumber = null;
+    let attempt = 0;
+    const maxAttempts = 10;
+
+    while (attempt < maxAttempts) {
+      const [[{ count }]] = await connection.query(
+        "SELECT COUNT(*) as count FROM invoices WHERE franchise_id = ? AND YEAR(invoice_date) = YEAR(CURDATE())",
+        [franchiseId]
+      );
+
+      invoiceNumber = `INV/${dayjs().format("YYYY")}/WG/${String(
+        count + attempt + 1
+      ).padStart(4, "0")}`;
+
+      // Check if this number already exists
+      const [[existing]] = await connection.query(
+        "SELECT id FROM invoices WHERE invoice_number = ?",
+        [invoiceNumber]
+      );
+
+      if (!existing) {
+        break;
+      }
+
+      attempt++;
+    }
+
+    if (attempt >= maxAttempts) {
+      throw new Error(
+        "Failed to generate unique invoice number after multiple attempts"
+      );
+    }
 
     // Insert invoice without GST
     const [result] = await connection.query(
@@ -573,7 +652,7 @@ export const generateInvoiceWithoutGST = async (req, res) => {
       for (const bookingId of bookings) {
         await connection.query(
           `INSERT INTO invoice_items (invoice_id, booking_id, description, quantity, unit_price, amount)
-           SELECT ?, id, CONCAT('Booking: ', consignment_no), 1, total, total
+           SELECT ?, id, CONCAT('Booking: ', consignment_number), 1, total, total
            FROM bookings WHERE id = ?`,
           [invoiceId, bookingId]
         );
@@ -617,7 +696,7 @@ export const getInvoiceById = async (req, res) => {
     }
 
     const [items] = await db.query(
-      `SELECT ii.*, b.consignment_no 
+      `SELECT ii.*, b.consignment_number 
        FROM invoice_items ii
        LEFT JOIN bookings b ON ii.booking_id = b.id
        WHERE ii.invoice_id = ?`,
@@ -746,5 +825,170 @@ export const getRecycledInvoices = async (req, res) => {
       success: false,
       message: "Failed to fetch recycled invoices",
     });
+  }
+};
+
+// Download invoice as HTML
+export const downloadInvoice = async (req, res) => {
+  try {
+    const franchiseId = req.user.franchise_id;
+    const { id, file } = req.params;
+    const db = getDb();
+    const __filename = fileURLToPath(import.meta.url);
+    const __dirname = path.dirname(__filename);
+
+    // If file parameter is provided, download by filename from invoices folder
+    if (file) {
+      const fs = await import("fs").then((m) => m.promises);
+      const path_ = await import("path");
+      const invoicesDir = path_.join(__dirname, "../../invoices");
+      const filePath = path_.join(invoicesDir, file);
+
+      // Security: ensure file is within invoices directory
+      if (!filePath.startsWith(invoicesDir)) {
+        return res
+          .status(403)
+          .json({ success: false, message: "Access denied" });
+      }
+
+      try {
+        const fileContent = await fs.readFile(filePath);
+        res.setHeader("Content-Type", "application/pdf");
+        res.setHeader("Content-Disposition", `attachment; filename="${file}"`);
+        res.send(fileContent);
+      } catch (fileError) {
+        return res
+          .status(404)
+          .json({ success: false, message: "Invoice file not found" });
+      }
+    } else {
+      // Download by invoice ID (existing functionality - render as HTML)
+      // Fetch invoice
+      const [[invoice]] = await db.query(
+        "SELECT * FROM invoices WHERE id = ? AND franchise_id = ?",
+        [id, franchiseId]
+      );
+
+      if (!invoice) {
+        return res
+          .status(404)
+          .json({ success: false, message: "Invoice not found" });
+      }
+
+      // Fetch franchise details
+      const [[franchise]] = await db.query(
+        "SELECT * FROM franchises WHERE id = ?",
+        [franchiseId]
+      );
+
+      // Fetch customer details
+      const [[customer]] = await db.query("SELECT * FROM users WHERE id = ?", [
+        invoice.customer_id,
+      ]);
+
+      // Fetch bookings linked to this invoice (use LEFT JOIN to include empty results)
+      // If a specific consignment number is provided, filter to only that consignment
+      let consignmentNo = req.query.consignmentNo || req.body?.consignmentNo;
+      if (consignmentNo) {
+        consignmentNo = consignmentNo.trim(); // Remove leading/trailing whitespace
+      }
+
+      let bookingQuery = `SELECT DISTINCT b.* FROM bookings b
+         LEFT JOIN invoice_items ii ON b.id = ii.booking_id
+         WHERE ii.invoice_id = ?`;
+      let bookingParams = [id];
+
+      if (consignmentNo) {
+        // Use case-insensitive comparison
+        bookingQuery += ` AND LOWER(b.consignment_number) = LOWER(?)`;
+        bookingParams.push(consignmentNo);
+      }
+
+      const [bookings] = await db.query(bookingQuery, bookingParams);
+
+      // Get the directory of the current file
+      const templatePath = path.join(__dirname, "../templates/invoice.ejs");
+
+      // Ensure invoice has required fields
+      const invoiceData = {
+        ...invoice,
+        invoice_number: invoice.invoice_number || `INV-${id}`,
+        invoice_date: invoice.invoice_date || new Date().toISOString(),
+      };
+
+      // Ensure franchise has required fields
+      const franchiseData = franchise || {
+        company_name: "Billing Company",
+        email: "",
+        phone: "",
+        address: "",
+      };
+
+      // Ensure customer has required fields
+      const customerData = customer || {
+        company_name: "Customer",
+        email: "",
+        phone: "",
+        address: "",
+      };
+
+      // Render EJS template
+      const html = await ejs.renderFile(templatePath, {
+        invoice: invoiceData,
+        franchise: franchiseData,
+        customer: customerData,
+        bookings: bookings || [],
+      });
+
+      // Convert HTML to PDF using html-pdf
+      try {
+        const options = {
+          format: "A4",
+          margin: "10mm",
+          timeout: 30000,
+        };
+
+        // Create PDF from HTML
+        const pdfBuffer = await new Promise((resolve, reject) => {
+          pdf.create(html, options).toBuffer((err, buffer) => {
+            if (err) reject(err);
+            else resolve(buffer);
+          });
+        });
+
+        // Set response headers for PDF download
+        // Sanitize filename to remove invalid characters
+        const sanitizedInvoiceNumber = invoiceData.invoice_number.replace(
+          /[\/\\?%*:|"<>]/g,
+          "-"
+        );
+        res.setHeader("Content-Type", "application/pdf");
+        res.setHeader(
+          "Content-Disposition",
+          `attachment; filename="Invoice-${sanitizedInvoiceNumber}.pdf"`
+        );
+
+        // Send the PDF
+        res.send(pdfBuffer);
+      } catch (pdfError) {
+        console.error("PDF generation error:", pdfError);
+        // Fallback: send as HTML if PDF generation fails
+        const sanitizedInvoiceNumber = invoiceData.invoice_number.replace(
+          /[\/\\?%*:|"<>]/g,
+          "-"
+        );
+        res.setHeader("Content-Type", "text/html; charset=utf-8");
+        res.setHeader(
+          "Content-Disposition",
+          `attachment; filename="Invoice-${sanitizedInvoiceNumber}.html"`
+        );
+        res.send(html);
+      }
+    }
+  } catch (error) {
+    console.error("Download invoice error:", error);
+    res
+      .status(500)
+      .json({ success: false, message: "Failed to download invoice" });
   }
 };

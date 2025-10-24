@@ -8,6 +8,10 @@ const InvoiceGeneratePage = () => {
   const [bookings, setBookings] = useState([]);
   const [selectedBookings, setSelectedBookings] = useState([]);
   const [showBookingModal, setShowBookingModal] = useState(false);
+  const [invoices, setInvoices] = useState([]);
+  const [searchInvoiceInput, setSearchInvoiceInput] = useState("");
+  const [searchedInvoices, setSearchedInvoices] = useState([]);
+  const [downloadingInvoiceId, setDownloadingInvoiceId] = useState(null);
 
   const [formData, setFormData] = useState({
     customer_name: "",
@@ -169,12 +173,166 @@ const InvoiceGeneratePage = () => {
     }
   };
 
+  const handleSearchInvoices = async () => {
+    if (!searchInvoiceInput.trim()) {
+      alert("Please enter an invoice number or customer ID");
+      return;
+    }
+
+    try {
+      const token = localStorage.getItem("token");
+      const response = await fetch(
+        `http://localhost:5000/api/invoices?invoice_number=${searchInvoiceInput}`,
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        }
+      );
+
+      const data = await response.json();
+      if (data.success) {
+        setSearchedInvoices(data.data || []);
+      } else {
+        setSearchedInvoices([]);
+      }
+    } catch (error) {
+      console.error("Error searching invoices:", error);
+      alert("Failed to search invoices");
+    }
+  };
+
+  const handleDownloadInvoice = async (invoiceId, invoiceNumber) => {
+    try {
+      setDownloadingInvoiceId(invoiceId);
+      const token = localStorage.getItem("token");
+
+      const response = await fetch(
+        `http://localhost:5000/api/invoices/${invoiceId}/download`,
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        }
+      );
+
+      if (!response.ok) {
+        throw new Error("Invoice download failed");
+      }
+
+      const blob = await response.blob();
+      const blobUrl = window.URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = blobUrl;
+      link.download = `${invoiceNumber}.pdf`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(blobUrl);
+    } catch (error) {
+      console.error("Download error:", error);
+      alert("Failed to download invoice");
+    } finally {
+      setDownloadingInvoiceId(null);
+    }
+  };
+
   const totals = calculateTotals();
 
   return (
     <div className="p-6">
       <div className="max-w-6xl mx-auto">
         <h1 className="text-3xl font-bold mb-6">Generate Invoice</h1>
+
+        {/* Search and Download Invoices Section */}
+        <div className="bg-white rounded-lg shadow p-6 mb-6">
+          <h2 className="text-xl font-semibold mb-4 border-b pb-2">
+            Search & Download Invoices
+          </h2>
+          <div className="flex gap-2 mb-4">
+            <input
+              type="text"
+              placeholder="Enter invoice number..."
+              value={searchInvoiceInput}
+              onChange={(e) => setSearchInvoiceInput(e.target.value)}
+              className="flex-1 border rounded px-3 py-2"
+            />
+            <button
+              onClick={handleSearchInvoices}
+              className="px-6 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
+            >
+              Search
+            </button>
+          </div>
+
+          {searchedInvoices.length > 0 && (
+            <div className="overflow-x-auto">
+              <table className="w-full border-collapse">
+                <thead>
+                  <tr className="bg-gray-200 border-b">
+                    <th className="px-2 py-1 text-left font-semibold">
+                      Invoice Number
+                    </th>
+                    <th className="px-2 py-1 text-left font-semibold">
+                      Customer ID
+                    </th>
+                    <th className="px-2 py-1 text-left font-semibold">
+                      Invoice Date
+                    </th>
+                    <th className="px-2 py-1 text-right font-semibold">
+                      Total Amount
+                    </th>
+                    <th className="px-2 py-1 text-center font-semibold">
+                      Action
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {searchedInvoices.map((invoice, idx) => (
+                    <tr key={idx} className="border-b hover:bg-gray-100">
+                      <td className="px-2 py-1 font-medium">
+                        {invoice.invoice_number}
+                      </td>
+                      <td className="px-2 py-1">
+                        {invoice.customer_id || "N/A"}
+                      </td>
+                      <td className="px-2 py-1">
+                        {invoice.invoice_date
+                          ? new Date(invoice.invoice_date).toLocaleDateString()
+                          : "N/A"}
+                      </td>
+                      <td className="px-2 py-1 text-right">
+                        ₹{parseFloat(invoice.total_amount || 0).toFixed(2)}
+                      </td>
+                      <td className="px-2 py-1 text-center">
+                        <button
+                          onClick={() =>
+                            handleDownloadInvoice(
+                              invoice.id,
+                              invoice.invoice_number
+                            )
+                          }
+                          disabled={downloadingInvoiceId === invoice.id}
+                          className="px-3 py-1 bg-green-600 text-white rounded text-xs hover:bg-green-700 disabled:opacity-50"
+                        >
+                          {downloadingInvoiceId === invoice.id
+                            ? "Downloading..."
+                            : "Download"}
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          {searchedInvoices.length === 0 && searchInvoiceInput && (
+            <p className="text-center text-gray-500 mt-4">
+              No invoices found for the search criteria.
+            </p>
+          )}
+        </div>
 
         <form
           onSubmit={handleSubmit}

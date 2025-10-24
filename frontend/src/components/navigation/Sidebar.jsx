@@ -232,11 +232,11 @@ export function Sidebar() {
         <span className="text-xs text-emerald-100">Go Easy...</span>
       </div>
       <nav className="flex-1 space-y-1 overflow-y-auto px-3 py-4">
-        {menuStructure.map((entry) => {
+        {menuStructure.map((entry, index) => {
           if (entry.type === "heading") {
             return (
               <div
-                key={entry.label}
+                key={`heading-${index}`}
                 className="mt-4 px-3 text-xs font-semibold uppercase tracking-wide text-emerald-600"
               >
                 {entry.label}
@@ -252,7 +252,7 @@ export function Sidebar() {
             );
 
             return (
-              <div key={entry.label}>
+              <div key={`group-${index}`}>
                 <button
                   onClick={() => toggleGroup(entry.label)}
                   className={`group relative flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors hover:bg-emerald-50 hover:text-emerald-700 ${
@@ -300,7 +300,7 @@ export function Sidebar() {
           const Icon = entry.icon;
           return (
             <NavLink
-              key={entry.to}
+              key={`item-${index}`}
               to={entry.to}
               end={entry.to === "/" || entry.to.includes("/cashcounter/")}
               className={({ isActive }) =>

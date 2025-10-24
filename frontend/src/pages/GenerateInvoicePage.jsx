@@ -4,6 +4,7 @@ import { Info, FileText } from "lucide-react";
 export default function GenerateInvoicePage() {
   const [formData, setFormData] = useState({
     customer_id: "",
+    consignment_no: "",
     address: "",
     invoice_no: "",
     invoice_date: new Date().toISOString().split("T")[0],
@@ -35,28 +36,54 @@ export default function GenerateInvoicePage() {
   };
 
   const handleShowBookings = async () => {
-    if (!formData.period_from || !formData.period_to) {
-      alert("Please select both Period From and Period To dates");
+    // Allow search by consignment number OR date range (not both required)
+    const hasDateRange = formData.period_from && formData.period_to;
+    const hasConsignmentNo = formData.consignment_no;
+
+    if (!hasDateRange && !hasConsignmentNo) {
+      alert(
+        "Please enter Consignment Number OR select both Period From and Period To dates"
+      );
       return;
     }
 
     setLoading(true);
     try {
       const token = localStorage.getItem("token");
-      const response = await fetch(
-        `http://localhost:5000/api/bookings/filter?customer_id=${formData.customer_id}&from_date=${formData.period_from}&to_date=${formData.period_to}`,
-        {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        }
-      );
+
+      // Build URL with available filters
+      let url = `http://localhost:5000/api/bookings/filter?`;
+      const params = [];
+
+      if (formData.customer_id) {
+        params.push(`customer_id=${formData.customer_id}`);
+      }
+      if (formData.consignment_no) {
+        params.push(`consignment_no=${formData.consignment_no}`);
+      }
+      if (hasDateRange) {
+        params.push(`from_date=${formData.period_from}`);
+        params.push(`to_date=${formData.period_to}`);
+      }
+
+      url += params.join("&");
+
+      const response = await fetch(url, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
 
       const data = await response.json();
       if (data.success) {
         const fetchedBookings = data.data?.bookings || [];
         setBookings(fetchedBookings);
         calculateTotals(fetchedBookings);
+        if (fetchedBookings.length === 0) {
+          alert("No bookings found for the selected criteria");
+        }
+      } else {
+        alert(data.message || "Failed to fetch bookings");
       }
     } catch (error) {
       console.error("Error fetching bookings:", error);
@@ -117,6 +144,7 @@ export default function GenerateInvoicePage() {
         // Reset form
         setFormData({
           customer_id: "",
+          consignment_no: "",
           address: "",
           invoice_no: "",
           invoice_date: new Date().toISOString().split("T")[0],
@@ -179,6 +207,21 @@ export default function GenerateInvoicePage() {
               name="customer_id"
               value={formData.customer_id}
               onChange={handleInputChange}
+              className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1">
+              Consignment No{" "}
+              <span className="text-gray-400 text-xs">(Optional)</span>:
+            </label>
+            <input
+              type="text"
+              name="consignment_no"
+              value={formData.consignment_no}
+              onChange={handleInputChange}
+              placeholder="Search by consignment number"
               className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
             />
           </div>
