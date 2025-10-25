@@ -1,9 +1,9 @@
-import { ChevronDown, Menu } from "lucide-react";
+import { ChevronDown, Menu, MessageCircle } from "lucide-react";
 import { useAuth } from "../../contexts/AuthContext";
 import { useNavigate } from "react-router-dom";
 import dayjs from "dayjs";
 
-export function TopBar() {
+export function TopBar({ onOpenChat }) {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
 
@@ -62,6 +62,15 @@ export function TopBar() {
           </span>
         </div>
         <div className="flex items-center gap-3">
+          <button
+            type="button"
+            onClick={onOpenChat}
+            className="flex items-center gap-2 rounded-md border border-blue-200 bg-blue-50 px-3 py-1.5 text-xs font-semibold text-blue-600 hover:bg-blue-100 transition"
+            title="Open AI Assistant"
+          >
+            <MessageCircle size={16} />
+            <span className="hidden sm:inline">AI Assistant</span>
+          </button>
           <span className="text-sm font-medium text-slate-600">
             {user?.full_name || user?.username}
           </span>
